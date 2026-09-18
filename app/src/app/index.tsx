@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GameCard, type GameInfo } from '@/components/GameCard';
 import { TicTacToePreview } from '@/components/TicTacToePreview';
 import { CheckersPreview } from '@/components/CheckersPreview';
 import { BattleshipPreview } from '@/components/BattleshipPreview';
+import { ChessPreview } from '@/components/ChessPreview';
 import { Fonts, FontSize, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { StatusBar } from 'expo-status-bar';
@@ -38,6 +39,13 @@ const games: GameInfo[] = [
     href: '/games/battleships',
     preview: <BattleshipPreview />,
   },
+{
+    slug: 'chess',
+    name: 'Chess',
+    description: 'Checkmate the king with castles and queens',
+    href: '/games/chess',
+    preview: <ChessPreview />,
+  },
 ];
 
 function DoodleUnderline({ color }: { color: string }) {
@@ -65,6 +73,9 @@ function DoodleUnderline({ color }: { color: string }) {
 export default function Home() {
   const theme = useTheme();
   const scheme = useColorScheme();
+  const [gridWidth, setGridWidth] = useState(0);
+  const columns = gridWidth > 0 && gridWidth >= 640 ? 2 : 1;
+  const cardWidth = `${100 / columns}%` as `${number}%`;
 
 
   return (
@@ -82,9 +93,12 @@ export default function Home() {
             <DoodleUnderline color={theme.accent} />
           </View>
 
-          <View style={styles.grid}>
+          <View
+            style={styles.grid}
+            onLayout={(event) => setGridWidth(event.nativeEvent.layout.width)}
+          >
             {games.map((game) => (
-              <View key={game.slug} style={styles.cardWrapper}>
+              <View key={game.slug} style={[styles.cardWrapper, { width: cardWidth }]}>
                 <GameCard game={game} />
               </View>
             ))}
@@ -130,10 +144,8 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.four,
   },
   cardWrapper: {
-    flex: 1,
-    paddingHorizontal: Spacing.half,
+    padding: Spacing.two,
   },
 });

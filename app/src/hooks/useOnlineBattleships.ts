@@ -314,7 +314,7 @@ export function useOnlineBattleships() {
     if (!normalized) return;
     closeError();
     publish({ ...initialState });
-    sendWhenAuthed({ type: "join_room", code: normalized });
+    sendWhenAuthed({ type: "join_room", code: normalized, gameType: "battleships" });
   }, []);
 
   // Place or remove a ship while arranging. Returns true when the grid changed.

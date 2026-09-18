@@ -1,14 +1,8 @@
-import { WORDS } from "./words";
+import { randomWord } from "@shared/words";
+
+export { generateUsername } from "@shared/words";
 
 const SHARED_SECRET = process.env.AUTH_SECRET || "bored-games-shared-secret";
-
-export function randomWord(): string {
-  return WORDS[Math.floor(Math.random() * WORDS.length)];
-}
-
-export function generateUsername(): string {
-  return [randomWord(), randomWord(), randomWord()].join("-");
-}
 
 export function generateRoomCode(): string {
   return [randomWord(), randomWord(), randomWord()].join("-");

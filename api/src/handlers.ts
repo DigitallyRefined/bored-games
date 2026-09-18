@@ -204,9 +204,13 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
     return;
   }
 
-  const { code } = msg;
+  const { code, gameType } = msg;
   if (typeof code !== "string") {
     sendError(ws, "code is required");
+    return;
+  }
+  if (typeof gameType !== "string") {
+    sendError(ws, "gameType is required");
     return;
   }
 
@@ -220,6 +224,14 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
   const room = rooms[0] as Room;
   if (room.status !== "waiting") {
     sendError(ws, "Room is not accepting players");
+    return;
+  }
+
+  if (room.game_type !== gameType) {
+    sendError(
+      ws,
+      `Wrong game type: this room is for ${room.game_type}, not ${gameType}`
+    );
     return;
   }
 

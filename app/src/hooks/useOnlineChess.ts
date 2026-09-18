@@ -1,10 +1,14 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 import { gameSocket } from "@/lib/websocket";
+import * as core from "@/lib/chess";
 import type {
-  TicTacToeBoard,
-  TicTacToePlayer,
-} from "@shared/games/tic-tac-toe";
+  CastlingRights,
+  ChessBoard,
+  ChessMove,
+  ChessOwner,
+  ChessPieceType,
+} from "@/lib/chess";
 import type { ClientMessage, ServerMessage } from "@/lib/protocol";
 
 export type OnlinePhase =
@@ -21,25 +25,28 @@ export interface OnlinePlayer {
   symbol: string;
 }
 
-export interface OnlineTicTacToe {
+export interface OnlineChess {
   phase: OnlinePhase;
   roomId: string | null;
   code: string | null;
   playerIndex: number | null;
-  symbol: TicTacToePlayer | null;
-  board: TicTacToeBoard;
+  symbol: string | null;
+  board: ChessBoard;
   currentPlayerIndex: number | null;
+  castlingRights: CastlingRights;
+  enPassantTarget: number | null;
+  lastMove: ChessMove | null;
   isMyTurn: boolean;
-  winner: TicTacToePlayer | "draw" | null;
+  winner: ChessOwner | "draw" | null;
   players: OnlinePlayer[];
   error: string | null;
   statusMessage: string | null;
   waitingCounts: { current: number; required: number } | null;
 }
 
-const EMPTY_BOARD: TicTacToeBoard = Array(9).fill(null);
+const EMPTY_BOARD: ChessBoard = Array.from({ length: core.CELL_COUNT }, () => null);
 
-const initialState: OnlineTicTacToe = {
+const initialState: OnlineChess = {
   phase: "idle",
   roomId: null,
   code: null,
@@ -47,6 +54,9 @@ const initialState: OnlineTicTacToe = {
   symbol: null,
   board: EMPTY_BOARD,
   currentPlayerIndex: null,
+  castlingRights: core.createInitialCastlingRights(),
+  enPassantTarget: null,
+  lastMove: null,
   isMyTurn: false,
   winner: null,
   players: [],
@@ -55,12 +65,12 @@ const initialState: OnlineTicTacToe = {
   waitingCounts: null,
 };
 
-let state: OnlineTicTacToe = initialState;
+let state: OnlineChess = initialState;
 const listeners = new Set<() => void>();
 let pendingAction: ClientMessage | null = null;
 let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
-function publish(next: OnlineTicTacToe): void {
+function publish(next: OnlineChess): void {
   state = next;
   listeners.forEach((listener) => listener());
 }
@@ -68,9 +78,7 @@ function publish(next: OnlineTicTacToe): void {
 function setError(message: string | null): void {
   const hadTimer = errorTimer !== null;
   if (errorTimer) clearTimeout(errorTimer);
-  errorTimer = message
-    ? setTimeout(() => closeError(), 5000)
-    : null;
+  errorTimer = message ? setTimeout(() => closeError(), 5000) : null;
   if (message || hadTimer) {
     publish({ ...state, error: message });
   }
@@ -84,14 +92,44 @@ function closeError(): void {
   publish({ ...state, error: null });
 }
 
-function boardFromServer(gameState: unknown): TicTacToeBoard {
-  const gs = gameState as { board?: TicTacToeBoard } | null;
+function boardFromServer(gameState: unknown): ChessBoard {
+  const gs = gameState as { board?: ChessBoard } | null;
   return Array.isArray(gs?.board) ? gs.board : EMPTY_BOARD;
 }
 
 function indexFromServer(gameState: unknown): number {
   const gs = gameState as { currentPlayerIndex?: number } | null;
   return typeof gs?.currentPlayerIndex === "number" ? gs.currentPlayerIndex : 0;
+}
+
+function castlingFromServer(gameState: unknown): CastlingRights {
+  const gs = gameState as { castlingRights?: Partial<CastlingRights> } | null;
+  const rights = gs?.castlingRights;
+  if (!rights) return initialState.castlingRights;
+  return {
+    wk: rights.wk === true,
+    wq: rights.wq === true,
+    bk: rights.bk === true,
+    bq: rights.bq === true,
+  };
+}
+
+function enPassantFromServer(gameState: unknown): number | null {
+  const gs = gameState as { enPassantTarget?: number | null } | null;
+  return typeof gs?.enPassantTarget === "number" ? gs.enPassantTarget : null;
+}
+
+function lastMoveFromServer(gameState: unknown): ChessMove | null {
+  const gs = gameState as { lastMove?: ChessMove | null } | null;
+  const move = gs?.lastMove;
+  if (!move || typeof move.from !== "number" || typeof move.to !== "number") {
+    return null;
+  }
+  return {
+    from: move.from,
+    to: move.to,
+    promotion: move.promotion as ChessPieceType | undefined,
+  };
 }
 
 function handleServerMessage(msg: ServerMessage): void {
@@ -113,7 +151,7 @@ function handleServerMessage(msg: ServerMessage): void {
         roomId: msg.roomId,
         code: msg.code,
         playerIndex: msg.playerIndex,
-        symbol: (msg.symbol as TicTacToePlayer) ?? null,
+        symbol: msg.symbol,
         statusMessage: "Waiting for opponent to join…",
       });
       break;
@@ -140,15 +178,17 @@ function handleServerMessage(msg: ServerMessage): void {
       });
       break;
     case "game_start": {
-      const broadcastState = boardFromServer(msg.gameState);
       const index = indexFromServer(msg.gameState);
       publish({
         ...state,
         phase: "playing",
         roomId: msg.roomId,
         players: msg.players,
-        board: broadcastState,
+        board: boardFromServer(msg.gameState),
         currentPlayerIndex: index,
+        castlingRights: castlingFromServer(msg.gameState),
+        enPassantTarget: enPassantFromServer(msg.gameState),
+        lastMove: lastMoveFromServer(msg.gameState),
         isMyTurn: index === state.playerIndex,
         statusMessage: null,
         waitingCounts: null,
@@ -162,6 +202,9 @@ function handleServerMessage(msg: ServerMessage): void {
         ...state,
         board: boardFromServer(msg.gameState),
         currentPlayerIndex: index,
+        castlingRights: castlingFromServer(msg.gameState),
+        enPassantTarget: enPassantFromServer(msg.gameState),
+        lastMove: lastMoveFromServer(msg.gameState),
         isMyTurn: index === state.playerIndex,
         statusMessage: null,
       });
@@ -169,16 +212,19 @@ function handleServerMessage(msg: ServerMessage): void {
     }
     case "game_over": {
       if (state.roomId && msg.roomId !== state.roomId) break;
-      let winner: TicTacToePlayer | "draw" | null = null;
+      let winner: ChessOwner | "draw" | null = null;
       if (msg.isDraw) {
         winner = "draw";
       } else if (msg.winnerIndex !== null) {
-        winner = (["X", "O"] as TicTacToePlayer[])[msg.winnerIndex] ?? null;
+        winner = msg.winnerIndex as ChessOwner;
       }
       publish({
         ...state,
         phase: "gameOver",
         board: boardFromServer(msg.gameState),
+        castlingRights: castlingFromServer(msg.gameState),
+        enPassantTarget: enPassantFromServer(msg.gameState),
+        lastMove: lastMoveFromServer(msg.gameState),
         winner,
         statusMessage: null,
       });
@@ -221,17 +267,17 @@ function subscribe(cb: () => void): () => void {
   };
 }
 
-function getSnapshot(): OnlineTicTacToe {
+function getSnapshot(): OnlineChess {
   return state;
 }
 
-export function useOnlineTicTacToe() {
+export function useOnlineChess() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
 
   const createRoom = useCallback((): void => {
     closeError();
     publish({ ...initialState });
-    sendWhenAuthed({ type: "create_room", gameType: "tic-tac-toe" });
+    sendWhenAuthed({ type: "create_room", gameType: "chess" });
   }, []);
 
   const joinRoom = useCallback((code: string): void => {
@@ -239,25 +285,35 @@ export function useOnlineTicTacToe() {
     if (!normalized) return;
     closeError();
     publish({ ...initialState });
-    sendWhenAuthed({ type: "join_room", code: normalized, gameType: "tic-tac-toe" });
+    sendWhenAuthed({ type: "join_room", code: normalized, gameType: "chess" });
   }, []);
 
-  const makeMove = useCallback((cell: number): void => {
-    if (!state.roomId) return;
-    if (state.phase !== "playing") return;
-    if (!state.isMyTurn) return;
-    if (state.board[cell] !== null) return;
-    gameSocket.send({
-      type: "move",
-      roomId: state.roomId,
-      moveData: { cell },
-    });
-  }, []);
+  const makeMove = useCallback(
+    (from: number, to: number, promotion?: ChessPieceType): void => {
+      if (!state.roomId) return;
+      if (state.phase !== "playing") return;
+      if (!state.isMyTurn) return;
+      const moveData: { from: number; to: number; promotion?: string } = { from, to };
+      if (promotion) moveData.promotion = promotion;
+      gameSocket.send({ type: "move", roomId: state.roomId, moveData });
+    },
+    []
+  );
 
   const leaveRoom = useCallback((): void => {
     gameSocket.send({ type: "leave_room" });
     closeError();
     publish({ ...initialState });
+  }, []);
+
+  // When viewing from the opponent's side the board is mirrored so each player
+  // sees their own pieces at the bottom edge.
+  const toDisplayIndex = useCallback((index: number): number => {
+    return state.playerIndex === 1 ? core.flipIndex(index) : index;
+  }, []);
+
+  const toAbsoluteIndex = useCallback((index: number): number => {
+    return state.playerIndex === 1 ? core.flipIndex(index) : index;
   }, []);
 
   return {
@@ -266,5 +322,7 @@ export function useOnlineTicTacToe() {
     joinRoom,
     makeMove,
     leaveRoom,
+    toDisplayIndex,
+    toAbsoluteIndex,
   };
 }

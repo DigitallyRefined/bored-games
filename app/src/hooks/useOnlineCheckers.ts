@@ -245,7 +245,7 @@ export function useOnlineCheckers() {
     if (!normalized) return;
     closeError();
     publish({ ...initialState });
-    sendWhenAuthed({ type: "join_room", code: normalized });
+    sendWhenAuthed({ type: "join_room", code: normalized, gameType: "checkers" });
   }, []);
 
   const makeMove = useCallback((path: number[]): void => {

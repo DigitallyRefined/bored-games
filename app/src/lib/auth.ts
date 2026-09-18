@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 
 import { authTokenFor } from "@/lib/api";
-import { generateUsername } from "@/lib/words";
+import { generateUsername } from "@shared/words";
 
 const USERNAME_KEY = "bored-games:username";
 const TOKEN_CACHE_KEY = "bored-games:token";

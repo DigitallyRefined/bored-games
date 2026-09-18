@@ -1,3 +1,6 @@
+// Shared word list and generators used by both the API (room codes, usernames)
+// and the app (generating a client username). No server or UI dependencies.
+
 export const WORDS: string[] = [
   "apple", "apricot", "avocado", "banana", "blackberry", "blueberry", "cantaloupe", "cherry",
   "coconut", "cranberry", "date", "fig", "grape", "grapefruit", "guava", "kiwi",
@@ -44,3 +47,11 @@ export const WORDS: string[] = [
   "spring", "station", "stone", "stream", "summit", "swamp", "temple", "trail",
   "treasure", "tundra", "tunnel", "village", "vineyard", "volcano", "waterfall", "wilderness"
 ];
+
+export function randomWord(): string {
+  return WORDS[Math.floor(Math.random() * WORDS.length)];
+}
+
+export function generateUsername(): string {
+  return [randomWord(), randomWord(), randomWord()].join("-");
+}

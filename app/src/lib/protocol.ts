@@ -2,7 +2,7 @@
 export type ClientMessage =
   | { type: "auth"; username: string; token: string }
   | { type: "create_room"; gameType: string }
-  | { type: "join_room"; code: string }
+  | { type: "join_room"; code: string; gameType: string }
   | { type: "move"; roomId: string; moveData: unknown }
   | { type: "leave_room" }
   | { type: "ping" };
