@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   useColorScheme,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,9 +49,7 @@ function DoodleUnderline({ color }: { color: string }) {
 export default function Home() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const { width } = useWindowDimensions();
 
-  const isTablet = width >= 768;
 
   return (
     <SafeAreaView

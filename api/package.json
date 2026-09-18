@@ -1,0 +1,19 @@
+{
+  "name": "bored-games-api",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot index.ts",
+    "start": "bun run index.ts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  }
+}

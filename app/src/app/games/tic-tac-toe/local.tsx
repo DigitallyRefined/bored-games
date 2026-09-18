@@ -9,18 +9,18 @@ import {
   Animated,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useTicTacToe } from "@/hooks/useTicTacToe";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { SketchyButton } from "@/components/SketchyButton";
 
-export default function TicTacToeScreen() {
+export default function TicTacToeLocalScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const router = useRouter();
   const game = useTicTacToe();
+  const { makeMove, reset } = game;
   const cellAnims = useRef(
     Array.from({ length: 9 }, () => new Animated.Value(0))
   ).current;
@@ -37,9 +37,9 @@ export default function TicTacToeScreen() {
         duration: 250,
         useNativeDriver: false,
       }).start();
-      game.makeMove(index);
+      makeMove(index);
     },
-    [cellAnims, game.makeMove]
+    [cellAnims, makeMove]
   );
 
   const handleReset = useCallback(() => {
@@ -48,11 +48,11 @@ export default function TicTacToeScreen() {
       anim.stopAnimation();
       anim.setValue(0);
     });
-    game.reset();
+    reset();
     setTimeout(() => {
       pendingReset.current = false;
     }, 50);
-  }, [cellAnims, game.reset]);
+  }, [cellAnims, reset]);
 
   const statusColor = game.winner === null ? theme.accent : game.winner === "draw" ? theme.warning : theme.success;
 
@@ -72,19 +72,7 @@ export default function TicTacToeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <View style={styles.topBar}>
-            <Pressable
-              onPress={() => router.replace("/")}
-              style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-              hitSlop={10}
-            >
-              <Text style={[styles.backIcon, { color: theme.text }]}>←</Text>
-            </Pressable>
-            <Text style={[styles.screenTitle, { color: theme.text }]}>
-              Tic-Tac-Toe
-            </Text>
-            <View style={styles.backSpacer} />
-          </View>
+          <ScreenHeader title="Tic-Tac-Toe" backTo="/games/tic-tac-toe" />
 
           <View style={styles.statusRow}>
             <View
@@ -112,6 +100,7 @@ export default function TicTacToeScreen() {
                 <View style={[styles.boardLineVertical, { backgroundColor: theme.borderLight, left: "33.33%" }]} />
                 <View style={[styles.boardLineVertical, { backgroundColor: theme.borderLight, left: "66.66%" }]} />
               </View>
+              {/* eslint-disable-next-line react-hooks/refs -- Animated API maps over a ref-held array of Animated.Value */}
               {game.board.map((cell, index) => {
                 const isWinningCell = game.winningLine?.includes(index) ?? false;
                 return (
@@ -186,35 +175,6 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     alignSelf: "center",
     paddingHorizontal: Spacing.five,
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: Spacing.six,
-  },
-  backButton: {
-    padding: Spacing.two,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  backIcon: {
-    fontFamily: Fonts.hand,
-    fontSize: FontSize.xxl,
-    lineHeight: FontSize.xxl * 1.1,
-  },
-  pressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.7,
-  },
-  backSpacer: {
-    width: 30,
-  },
-  screenTitle: {
-    fontFamily: Fonts.title,
-    fontSize: FontSize.xxxl,
-    lineHeight: FontSize.xxxl * 1.1,
   },
   statusRow: {
     alignItems: "center",
