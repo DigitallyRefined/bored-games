@@ -7,12 +7,11 @@ import {
   useColorScheme,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useRouter, useNavigation } from "expo-router";
+import { useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SketchyButton } from "@/components/SketchyButton";
 import { CheckersBoard } from "@/components/CheckersBoard";
 import { useOnlineCheckers } from "@/hooks/useOnlineCheckers";
 import { useSocketStatus } from "@/lib/websocket";
@@ -26,7 +25,6 @@ function pal(owner: number) {
 export default function CheckersPlayOnlineScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const router = useRouter();
   const navigation = useNavigation();
   const socketStatus = useSocketStatus();
   const { game, makeMove, leaveRoom, toDisplayIndex, toAbsoluteIndex } =
@@ -150,10 +148,6 @@ export default function CheckersPlayOnlineScreen() {
     [game.phase, game.isMyTurn, game.board, path, selected, sources, toAbsoluteIndex, commitMove]
   );
 
-  const handleLeave = useCallback(() => {
-    router.replace("/games/checkers/online");
-  }, [router]);
-
   const getStatusText = (): { text: string; color: string } => {
     if (game.winner === "draw") {
       return { text: "It's a draw!", color: theme.warning };
@@ -276,24 +270,6 @@ export default function CheckersPlayOnlineScreen() {
           </View>
 
           {hint ? <Text style={[styles.hint, { color: theme.textSecondary }]}>{hint}</Text> : null}
-
-          <View style={styles.controls}>
-            {game.phase === "gameOver" || game.phase === "error" ? (
-              <SketchyButton
-                title="Back to lobby"
-                variant="primary"
-                onPress={handleLeave}
-                style={styles.leaveButton}
-              />
-            ) : (
-              <SketchyButton
-                title="Leave game"
-                variant="outline"
-                onPress={handleLeave}
-                style={styles.leaveButton}
-              />
-            )}
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -399,13 +375,5 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.md * 1.4,
     textAlign: "center",
     marginTop: Spacing.four,
-  },
-  controls: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: Spacing.five,
-  },
-  leaveButton: {
-    minWidth: 140,
   },
 });

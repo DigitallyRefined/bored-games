@@ -9,12 +9,11 @@ import {
   Animated,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useRouter, useNavigation } from "expo-router";
+import { useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SketchyButton } from "@/components/SketchyButton";
 import { useOnlineTicTacToe } from "@/hooks/useOnlineTicTacToe";
 import { winningLineFor } from "@shared/games/tic-tac-toe";
 import { useSocketStatus } from "@/lib/websocket";
@@ -22,7 +21,6 @@ import { useSocketStatus } from "@/lib/websocket";
 export default function TicTacToePlayOnlineScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const router = useRouter();
   const navigation = useNavigation();
   const socketStatus = useSocketStatus();
   const { game, makeMove, leaveRoom } = useOnlineTicTacToe();
@@ -62,10 +60,6 @@ export default function TicTacToePlayOnlineScreen() {
     },
     [game.phase, game.isMyTurn, game.board, cellAnims, makeMove]
   );
-
-  const handleLeave = useCallback(() => {
-    router.replace("/games/tic-tac-toe/online");
-  }, [router]);
 
   const getStatusText = (): { text: string; color: string } => {
     if (game.winner === "draw") {
@@ -223,24 +217,6 @@ export default function TicTacToePlayOnlineScreen() {
               })}
             </View>
           </View>
-
-          <View style={styles.controls}>
-            {game.phase === "gameOver" || game.phase === "error" ? (
-              <SketchyButton
-                title="Back to lobby"
-                variant="primary"
-                onPress={handleLeave}
-                style={styles.leaveButton}
-              />
-            ) : (
-              <SketchyButton
-                title="Leave game"
-                variant="outline"
-                onPress={handleLeave}
-                style={styles.leaveButton}
-              />
-            )}
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -382,13 +358,5 @@ const styles = StyleSheet.create({
   winningSymbol: {
     transform: [{ scale: 1.15 }],
     opacity: 0.9,
-  },
-  controls: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: Spacing.seven,
-  },
-  leaveButton: {
-    minWidth: 140,
   },
 });

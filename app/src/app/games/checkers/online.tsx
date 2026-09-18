@@ -70,17 +70,6 @@ export default function CheckersOnlineScreen() {
                   {game.waitingCounts.current} / {game.waitingCounts.required} players
                 </Text>
               )}
-              <SketchyButton
-                title="Leave room"
-                variant="outline"
-                onPress={() => {
-                  if (game.phase !== "playing" && game.phase !== "gameOver") {
-                    leaveRoom();
-                    setRoomCodeInput("");
-                  }
-                }}
-                style={styles.leaveButton}
-              />
             </View>
           ) : (
             <View style={styles.lobbyBlock}>
@@ -199,9 +188,5 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     minWidth: 160,
-  },
-  leaveButton: {
-    marginTop: Spacing.two,
-    minWidth: 140,
   },
 });

@@ -17,14 +17,14 @@ import { SketchyButton } from "@/components/SketchyButton";
 import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
-import { useOnlineTicTacToe } from "@/hooks/useOnlineTicTacToe";
+import { useOnlineBattleships } from "@/hooks/useOnlineBattleships";
 
-export default function TicTacToeOnlineScreen() {
+export default function BattleshipsOnlineScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
-  const { game, createRoom, joinRoom, leaveRoom } = useOnlineTicTacToe();
+  const { game, createRoom, joinRoom, leaveRoom } = useOnlineBattleships();
   const [roomCodeInput, setRoomCodeInput] = useState("");
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export default function TicTacToeOnlineScreen() {
   }, [navigation, leaveRoom]);
 
   useEffect(() => {
-    if (game.phase === "playing" || game.phase === "gameOver") {
-      router.push("/games/tic-tac-toe/play-online");
+    if (game.phase === "placing" || game.phase === "playing" || game.phase === "gameOver") {
+      router.push("/games/battleships/play-online");
     }
   }, [game.phase, router]);
 
@@ -47,7 +47,7 @@ export default function TicTacToeOnlineScreen() {
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          <ScreenHeader title="Play online" backTo="/games/tic-tac-toe" />
+          <ScreenHeader title="Play online" backTo="/games/battleships" />
 
           {game.error && (
             <SketchyCard variant="outlined" style={[styles.errorCard, { borderColor: theme.danger }]}>
@@ -188,9 +188,5 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     minWidth: 160,
-  },
-  leaveButton: {
-    marginTop: Spacing.two,
-    minWidth: 140,
   },
 });

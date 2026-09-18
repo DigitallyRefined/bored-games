@@ -2,6 +2,7 @@ import React from 'react';
 import { GameCard, type GameInfo } from '@/components/GameCard';
 import { TicTacToePreview } from '@/components/TicTacToePreview';
 import { CheckersPreview } from '@/components/CheckersPreview';
+import { BattleshipPreview } from '@/components/BattleshipPreview';
 import { Fonts, FontSize, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { StatusBar } from 'expo-status-bar';
@@ -29,6 +30,13 @@ const games: GameInfo[] = [
     description: 'Capture every piece on the wooden board',
     href: '/games/checkers',
     preview: <CheckersPreview />,
+  },
+  {
+    slug: 'battleships',
+    name: 'Battleships',
+    description: 'Hunt down the enemy fleet on the high seas',
+    href: '/games/battleships',
+    preview: <BattleshipPreview />,
   },
 ];
 

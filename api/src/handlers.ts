@@ -339,11 +339,8 @@ async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
     return;
   }
 
-  if (room.current_turn !== userId) {
-    sendError(ws, "Not your turn");
-    return;
-  }
-
+  // Turn enforcement lives in the game engine: settle-phase games let every
+  // player act while arranging, so a DB-level "current_turn" gate cannot apply.
   const engine = getGameEngine(room.game_type);
   if (!engine) {
     sendError(ws, "Unknown game type");
