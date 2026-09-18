@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useMemo } from "react";
+import React, { useRef, useCallback, useMemo, useEffect } from "react";
 import {
   Text,
   View,
@@ -9,49 +9,33 @@ import {
   Animated,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SketchyButton } from "@/components/SketchyButton";
 import { useOnlineTicTacToe } from "@/hooks/useOnlineTicTacToe";
+import { winningLineFor } from "@shared/games/tic-tac-toe";
 import { useSocketStatus } from "@/lib/websocket";
-
-const WINNING_LINES: number[][] = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6],
-];
-
-function winningLineFor(
-  board: (string | null)[],
-  symbol: string | null
-): number[] | null {
-  if (!symbol) return null;
-  for (const line of WINNING_LINES) {
-    const [a, b, c] = line;
-    if (board[a] === symbol && board[b] === symbol && board[c] === symbol) {
-      return line;
-    }
-  }
-  return null;
-}
 
 export default function TicTacToePlayOnlineScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
   const router = useRouter();
+  const navigation = useNavigation();
   const socketStatus = useSocketStatus();
   const { game, makeMove, leaveRoom } = useOnlineTicTacToe();
   const cellAnims = useRef(
     Array.from({ length: 9 }, () => new Animated.Value(0))
   ).current;
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", () => {
+      leaveRoom();
+    });
+    return unsubscribe;
+  }, [navigation, leaveRoom]);
 
   const winningLine = useMemo(
     () =>
@@ -80,9 +64,8 @@ export default function TicTacToePlayOnlineScreen() {
   );
 
   const handleLeave = useCallback(() => {
-    leaveRoom();
     router.replace("/games/tic-tac-toe/online");
-  }, [leaveRoom, router]);
+  }, [router]);
 
   const getStatusText = (): { text: string; color: string } => {
     if (game.winner === "draw") {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameCard, type GameInfo } from '@/components/GameCard';
 import { TicTacToePreview } from '@/components/TicTacToePreview';
+import { CheckersPreview } from '@/components/CheckersPreview';
 import { Fonts, FontSize, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +22,13 @@ const games: GameInfo[] = [
     description: 'The classic 3-in-a-row battle on paper',
     href: '/games/tic-tac-toe',
     preview: <TicTacToePreview />,
+  },
+  {
+    slug: 'checkers',
+    name: 'Checkers',
+    description: 'Capture every piece on the wooden board',
+    href: '/games/checkers',
+    preview: <CheckersPreview />,
   },
 ];
 

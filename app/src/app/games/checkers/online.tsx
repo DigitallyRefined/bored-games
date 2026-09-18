@@ -17,14 +17,14 @@ import { SketchyButton } from "@/components/SketchyButton";
 import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
-import { useOnlineTicTacToe } from "@/hooks/useOnlineTicTacToe";
+import { useOnlineCheckers } from "@/hooks/useOnlineCheckers";
 
-export default function TicTacToeOnlineScreen() {
+export default function CheckersOnlineScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
-  const { game, createRoom, joinRoom, leaveRoom } = useOnlineTicTacToe();
+  const { game, createRoom, joinRoom, leaveRoom } = useOnlineCheckers();
   const [roomCodeInput, setRoomCodeInput] = useState("");
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function TicTacToeOnlineScreen() {
 
   useEffect(() => {
     if (game.phase === "playing" || game.phase === "gameOver") {
-      router.push("/games/tic-tac-toe/play-online");
+      router.push("/games/checkers/play-online");
     }
   }, [game.phase, router]);
 
@@ -47,7 +47,7 @@ export default function TicTacToeOnlineScreen() {
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          <ScreenHeader title="Play online" backTo="/games/tic-tac-toe" />
+          <ScreenHeader title="Play online" backTo="/games/checkers" />
 
           {game.error && (
             <SketchyCard variant="outlined" style={[styles.errorCard, { borderColor: theme.danger }]}>

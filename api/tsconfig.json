@@ -11,6 +11,9 @@
     "strict": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
   }
 }

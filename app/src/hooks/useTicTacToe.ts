@@ -1,8 +1,16 @@
 import { useCallback, useState } from "react";
 
-export type Player = "X" | "O";
-export type CellValue = Player | null;
-export type Board = CellValue[];
+import {
+  createInitialBoard,
+  outcomeOf,
+  type TicTacToeBoard,
+  type TicTacToeCell,
+  type TicTacToePlayer,
+} from "@shared/games/tic-tac-toe";
+
+export type Player = TicTacToePlayer;
+export type CellValue = TicTacToeCell;
+export type Board = TicTacToeBoard;
 
 export interface GameState {
   board: Board;
@@ -13,19 +21,8 @@ export interface GameState {
   nextPlayer: Player | null;
 }
 
-const WINNING_LINES: number[][] = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6],
-];
-
 export function getInitialBoard(): Board {
-  return Array(9).fill(null);
+  return createInitialBoard();
 }
 
 export function useTicTacToe() {
@@ -46,23 +43,10 @@ export function useTicTacToe() {
       nextBoard[index] = currentPlayer;
       setBoard(nextBoard);
 
-      // Check for a winner
-      for (const line of WINNING_LINES) {
-        const [a, b, c] = line;
-        if (
-          nextBoard[a] !== null &&
-          nextBoard[a] === nextBoard[b] &&
-          nextBoard[a] === nextBoard[c]
-        ) {
-          setWinner(nextBoard[a] as Player);
-          setWinningLine(line);
-          return;
-        }
-      }
-
-      // Check for a draw
-      if (nextBoard.every((cell) => cell !== null)) {
-        setWinner("draw");
+      const outcome = outcomeOf(nextBoard);
+      if (outcome.winner !== null) {
+        setWinner(outcome.winner);
+        setWinningLine(outcome.winningLine);
         return;
       }
 
