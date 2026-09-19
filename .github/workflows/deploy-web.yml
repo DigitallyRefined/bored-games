@@ -1,0 +1,78 @@
+name: Deploy web app to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "shared/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      # Optional: set the API endpoint and auth secret for the built bundle.
+      # Only added to app/.env when the matching repository secrets exist.
+      - name: Configure app environment
+        working-directory: app
+        env:
+          EXPO_PUBLIC_WS_URL: ${{ vars.EXPO_PUBLIC_WS_URL }}
+          EXPO_PUBLIC_AUTH_SECRET: ${{ secrets.EXPO_PUBLIC_AUTH_SECRET }}
+        run: |
+          if [ -n "$EXPO_PUBLIC_WS_URL" ]; then
+            echo "EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL" >> .env
+          fi
+          if [ -n "$EXPO_PUBLIC_AUTH_SECRET" ]; then
+            echo "EXPO_PUBLIC_AUTH_SECRET=$EXPO_PUBLIC_AUTH_SECRET" >> .env
+          fi
+
+      # EXPO_BASE_URL makes expo export prefix all asset/link URLs with
+      # /bored-games so the site works under https://DigitallyRefined.github.io/bored-games.
+      - name: Export static web app
+        working-directory: app
+        env:
+          EXPO_BASE_URL: /bored-games
+        run: npx expo export --platform web
+
+      - name: Disable Jekyll processing
+        working-directory: app
+        run: touch dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
