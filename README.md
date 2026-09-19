@@ -87,6 +87,42 @@ bun run start      # production
 
 The server listens on `ws://localhost:3001/ws` (override with `PORT`). Connection details for Postgres come from the standard `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` environment variables and default to the credentials in `api/docker-compose.yml` (`boredgames`/`boredgames` on `localhost:5432`). The schema is created automatically on startup.
 
+### 3. Deploying the API to [Railway](https://railway.com)
+
+A `Dockerfile` at the repo root builds the API for production. It uses the **whole repo as the build context**, so `api/` can resolve the `@shared/*` imports from `shared/`. The image runs `bun run index.ts` from `/app/api`.
+
+```bash
+# Push the repo to GitHub
+git remote add origin git@github.com:<you>/bored-games.git
+git push -u origin main
+```
+
+1. **Import the repo.** In the Railway dashboard, **New Project → Deploy from GitHub repo** and select `bored-games`. Railway auto-detects the root `Dockerfile` (build provider **Dockerfile**, root directory left at `/`). Push-to-deploy is enabled automatically.
+2. **Add a database.** In the project, **New → Database → Add PostgreSQL**. Railway provisions it and exposes `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, and `DATABASE_URL`.
+3. **Link the API to the database.** With the API service selected, go to **Variables → Raw Editor** and add the connection details as variable references (replace `Postgres` with the actual database service name):
+   ```text
+   PGHOST=${{Postgres.PGHOST}}
+   PGPORT=${{Postgres.PGPORT}}
+   PGUSER=${{Postgres.PGUSER}}
+   PGPASSWORD=${{Postgres.PGPASSWORD}}
+   PGDATABASE=${{Postgres.PGDATABASE}}
+   ```
+   `PORT` is injected by Railway automatically. The schema is created on startup.
+4. **Set a shared auth secret.** Add `AUTH_SECRET` to the API service with a random value (e.g. generate one in Railway's variable editor via `CMD+K`). The app must sign tokens with the same secret — set that value as `EXPO_PUBLIC_AUTH_SECRET` in the app build. If you leave both unset, they fall back to the same development default (`bored-games-shared-secret`).
+5. **Expose it publicly.** In the API service, go to **Settings → Networking → Generate Domain**. You get a public HTTPS URL such as `https://bored-games-api.up.railway.app`.
+6. **Point the app at it.** In `app/.env`:
+   ```bash
+   EXPO_PUBLIC_WS_URL=wss://bored-games-api.up.railway.app/ws
+   EXPO_PUBLIC_AUTH_SECRET=<same value as AUTH_SECRET>
+   ```
+   (or enter the address in the app's **Settings** screen instead). Rebuild and run the app; online play now goes through Railway.
+
+   The first deployment compiles the Postgres schema on startup, so it may fail with "failed to initialize" until the database is reachable — just retry the deployment once Postgres is healthy.
+
+## 🤖 AI generated code disclaimer
+
+Some of the code in this repository may be generated with the assistance of AI tools. All changes are reviewed and tested on a real device with a human in the loop before being released.
+
 ## License
 
 [MIT](LICENSE)
