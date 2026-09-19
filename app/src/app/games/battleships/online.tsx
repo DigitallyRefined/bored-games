@@ -18,6 +18,7 @@ import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
 import { useOnlineBattleships } from "@/hooks/useOnlineBattleships";
+import { useWsConnectionFailureRedirect } from "@/hooks/useWsConnectionFailure";
 
 export default function BattleshipsOnlineScreen() {
   const theme = useTheme();
@@ -26,6 +27,8 @@ export default function BattleshipsOnlineScreen() {
   const navigation = useNavigation();
   const { game, createRoom, joinRoom, leaveRoom } = useOnlineBattleships();
   const [roomCodeInput, setRoomCodeInput] = useState("");
+
+  useWsConnectionFailureRedirect();
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", () => {

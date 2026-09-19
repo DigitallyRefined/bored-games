@@ -18,6 +18,7 @@ import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
 import { useOnlineChess } from "@/hooks/useOnlineChess";
+import { useWsConnectionFailureRedirect } from "@/hooks/useWsConnectionFailure";
 
 export default function ChessOnlineScreen() {
   const theme = useTheme();
@@ -26,6 +27,8 @@ export default function ChessOnlineScreen() {
   const navigation = useNavigation();
   const { game, createRoom, joinRoom, leaveRoom } = useOnlineChess();
   const [roomCodeInput, setRoomCodeInput] = useState("");
+
+  useWsConnectionFailureRedirect();
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", () => {

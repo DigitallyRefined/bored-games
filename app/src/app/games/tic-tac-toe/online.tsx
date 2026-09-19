@@ -18,6 +18,7 @@ import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
 import { useOnlineTicTacToe } from "@/hooks/useOnlineTicTacToe";
+import { useWsConnectionFailureRedirect } from "@/hooks/useWsConnectionFailure";
 
 export default function TicTacToeOnlineScreen() {
   const theme = useTheme();
@@ -26,6 +27,8 @@ export default function TicTacToeOnlineScreen() {
   const navigation = useNavigation();
   const { game, createRoom, joinRoom, leaveRoom } = useOnlineTicTacToe();
   const [roomCodeInput, setRoomCodeInput] = useState("");
+
+  useWsConnectionFailureRedirect();
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", () => {

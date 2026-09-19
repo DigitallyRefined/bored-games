@@ -3,13 +3,15 @@ import { Pressable, Text, View, StyleSheet } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { SettingsButton } from "@/components/SettingsButton";
 
 interface ScreenHeaderProps {
   title: string;
   backTo?: Href;
+  hideSettings?: boolean;
 }
 
-export function ScreenHeader({ title, backTo }: ScreenHeaderProps) {
+export function ScreenHeader({ title, backTo, hideSettings = false }: ScreenHeaderProps) {
   const theme = useTheme();
   const router = useRouter();
 
@@ -23,7 +25,11 @@ export function ScreenHeader({ title, backTo }: ScreenHeaderProps) {
         <Text style={[styles.backIcon, { color: theme.text }]}>←</Text>
       </Pressable>
       <Text style={[styles.screenTitle, { color: theme.text }]}>{title}</Text>
-      <View style={styles.backSpacer} />
+      {hideSettings ? (
+        <View style={styles.backSpacer} />
+      ) : (
+        <SettingsButton style={styles.settingsButton} />
+      )}
     </View>
   );
 }
@@ -51,7 +57,11 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   backSpacer: {
-    width: 30,
+    width: 34,
+  },
+  settingsButton: {
+    width: 34,
+    alignItems: "center",
   },
   screenTitle: {
     fontFamily: Fonts.title,

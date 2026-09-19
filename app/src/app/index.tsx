@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { SettingsButton } from '@/components/SettingsButton';
 
 const games: GameInfo[] = [
   {
@@ -87,10 +88,15 @@ export default function Home() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: theme.text }]}>
-              Bored <Text style={{ color: theme.accent }}>Games</Text>
-            </Text>
-            <DoodleUnderline color={theme.accent} />
+            <View style={styles.headerRow}>
+              <View style={styles.headerTitle}>
+                <Text style={[styles.title, { color: theme.text }]}>
+                  Bored <Text style={{ color: theme.accent }}>Games</Text>
+                </Text>
+                <DoodleUnderline color={theme.accent} />
+              </View>
+              <SettingsButton />
+            </View>
           </View>
 
           <View
@@ -124,6 +130,14 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.six,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  headerTitle: {
+    flexShrink: 1,
   },
   title: {
     fontFamily: Fonts.title,

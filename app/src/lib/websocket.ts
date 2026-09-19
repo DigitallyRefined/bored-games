@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 
-import { WS_URL } from "@/lib/api";
 import { getOrCreateAuth, saveUserId } from "@/lib/auth";
 import type { ClientMessage, ServerMessage } from "@/lib/protocol";
+import { getWsUrl, loadWsUrl } from "@/lib/settings";
 
-export type SocketStatus = "idle" | "connecting" | "connected" | "reconnecting";
+export type SocketStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "error";
 
 type MessageHandler = (msg: ServerMessage) => void;
 type StatusHandler = (status: SocketStatus) => void;
+type FailureHandler = () => void;
 
 const MAX_RECONNECT_DELAY = 10_000;
 const KEEP_ALIVE_INTERVAL = 25_000;
@@ -16,11 +22,13 @@ class GameConnection {
   private ws: WebSocket | null = null;
   private messageHandlers = new Set<MessageHandler>();
   private statusHandlers = new Set<StatusHandler>();
+  private failureHandlers = new Set<FailureHandler>();
   private status: SocketStatus = "idle";
   private reconnectDelay = 1_000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private closedByUser = false;
+  private everConnected = false;
   private userId: string | null = null;
   private username: string | null = null;
 
@@ -32,6 +40,13 @@ class GameConnection {
   onStatusChange(handler: StatusHandler): () => void {
     this.statusHandlers.add(handler);
     return () => this.statusHandlers.delete(handler);
+  }
+
+  // Fires when a connection attempt that never reached "connected" fails,
+  // e.g. after the user tries to create/join while the server is unreachable.
+  onConnectionFailed(handler: FailureHandler): () => void {
+    this.failureHandlers.add(handler);
+    return () => this.failureHandlers.delete(handler);
   }
 
   getStatus(): SocketStatus {
@@ -56,6 +71,7 @@ class GameConnection {
 
   disconnect(): void {
     this.closedByUser = true;
+    this.everConnected = false;
     this.clearTimers();
     this.ws?.close();
     this.ws = null;
@@ -71,10 +87,11 @@ class GameConnection {
   }
 
   private openSocket(): void {
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(getWsUrl());
     this.ws = ws;
 
     ws.onopen = () => {
+      this.everConnected = true;
       this.setStatus("connected");
       this.reconnectDelay = 1_000;
       this.startKeepAlive();
@@ -98,12 +115,23 @@ class GameConnection {
     ws.onclose = () => {
       this.stopKeepAlive();
       if (this.closedByUser) {
+        this.everConnected = false;
         this.ws = null;
         this.setStatus("idle");
         return;
       }
       this.ws = null;
-      this.scheduleReconnect();
+      if (this.everConnected) {
+        // We've been connected before, so treat this as a transient drop and
+        // keep the current session alive while we retry.
+        this.scheduleReconnect();
+      } else {
+        // The initial connection never succeeded (e.g. server unreachable).
+        // Stop retrying and notify listeners so the app can guide the user.
+        this.setStatus("error");
+        const handlers = Array.from(this.failureHandlers);
+        handlers.forEach((handler) => handler());
+      }
     };
   }
 
@@ -169,6 +197,9 @@ class GameConnection {
 }
 
 export const gameSocket = new GameConnection();
+
+// Load any saved WebSocket URL before the first connection attempt.
+void loadWsUrl();
 
 export function useSocketStatus(): SocketStatus {
   const [status, setStatus] = useState<SocketStatus>(gameSocket.getStatus());
