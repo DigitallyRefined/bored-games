@@ -45,7 +45,7 @@ The app talks to the API over a WebSocket (`/ws`). The protocol is defined in `a
 3. `move` — a player sends a move; the server validates it against the shared engine, applies it, stores it, and broadcasts the new state (`opponent_move`) or `game_over` to everyone in the room.
 4. Players disconnect via `leave_room`/socket close; the server cleans up waiting rooms and notifies the remaining player when an opponent drops.
 
-State is persisted in PostgreSQL: users, rooms, players, and every move.
+State is kept in an ephemeral in-memory SQLite database: users, rooms, players, and every move. Nothing survives a restart, and the API runs as a single instance.
 
 ## Setup
 
@@ -71,23 +71,20 @@ For **online play** the app must reach the API:
 
 ### 2. The API (for online play)
 
-The server requires [Bun](https://bun.com) and a PostgreSQL database.
+The server requires only [Bun](https://bun.com).
 
 ```bash
 cd api
 bun install
-
-# Start a local Postgres (Docker)
-bun run db:up
 
 # Start the server
 bun run dev        # development (hot reload), or:
 bun run start      # production
 ```
 
-The server listens on `ws://localhost:3001/ws` (override with `PORT`). Connection details for Postgres come from the standard `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` environment variables and default to the credentials in `api/docker-compose.yml` (`boredgames`/`boredgames` on `localhost:5432`). The schema is created automatically on startup.
+The server listens on `ws://localhost:3001/ws` (override with `PORT`).
 
-### 3. Deploying the API to [Railway](https://railway.com)
+### 3. Deploying the API to [Render](https://render.com)
 
 A `Dockerfile` at the repo root builds the API for production. It uses the **whole repo as the build context**, so `api/` can resolve the `@shared/*` imports from `shared/`. The image runs `bun run index.ts` from `/app/api`.
 
@@ -97,27 +94,30 @@ git remote add origin git@github.com:<you>/bored-games.git
 git push -u origin main
 ```
 
-1. **Import the repo.** In the Railway dashboard, **New Project → Deploy from GitHub repo** and select `bored-games`. Railway auto-detects the root `Dockerfile` (build provider **Dockerfile**, root directory left at `/`). Push-to-deploy is enabled automatically.
-2. **Add a database.** In the project, **New → Database → Add PostgreSQL**. Railway provisions it and exposes `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, and `DATABASE_URL`.
-3. **Link the API to the database.** With the API service selected, go to **Variables → Raw Editor** and add the connection details as variable references (replace `Postgres` with the actual database service name):
-   ```text
-   PGHOST=${{Postgres.PGHOST}}
-   PGPORT=${{Postgres.PGPORT}}
-   PGUSER=${{Postgres.PGUSER}}
-   PGPASSWORD=${{Postgres.PGPASSWORD}}
-   PGDATABASE=${{Postgres.PGDATABASE}}
-   ```
-   `PORT` is injected by Railway automatically. The schema is created on startup.
-4. **Set a shared auth secret.** Add `AUTH_SECRET` to the API service with a random value (e.g. generate one in Railway's variable editor via `CMD+K`). The app must sign tokens with the same secret — set that value as `EXPO_PUBLIC_AUTH_SECRET` in the app build. If you leave both unset, they fall back to the same development default (`bored-games-shared-secret`).
-5. **Expose it publicly.** In the API service, go to **Settings → Networking → Generate Domain**. You get a public HTTPS URL such as `https://bored-games-api.up.railway.app`.
-6. **Point the app at it.** In `app/.env`:
+1. **Create the API service.** In the Render dashboard, **New + → Web Service → Build and deploy from a Git repository** and select `bored-games`. Leave **Root Directory empty** — with a root directory set, Render only sends that folder to the Docker build, which would break the `../shared` imports. Render auto-detects the root `Dockerfile` (runtime **Docker**) and starts the container. Push-to-deploy is automatic. No database is needed — the API uses an in-memory SQLite database, so run it as a **single instance** (state resets on every deploy).
+2. **Set a shared auth secret.** In the Web Service's **Environment** tab, add `AUTH_SECRET` with a random value. The app must sign tokens with the same secret — set that value as `EXPO_PUBLIC_AUTH_SECRET` in the app build. If you leave both unset, they fall back to the same development default (`bored-games-shared-secret`).
+3. **Expose it publicly.** In the Web Service's **Settings → Domains**, confirm the generated URL, e.g. `https://bored-games-api.onrender.com`.
+4. **Point the app at it.** In `app/.env`:
    ```bash
-   EXPO_PUBLIC_WS_URL=wss://bored-games-api.up.railway.app/ws
+   EXPO_PUBLIC_WS_URL=wss://bored-games-api.onrender.com/ws
    EXPO_PUBLIC_AUTH_SECRET=<same value as AUTH_SECRET>
    ```
-   (or enter the address in the app's **Settings** screen instead). Rebuild and run the app; online play now goes through Railway.
+   (or enter the address in the app's **Settings** screen instead). Rebuild and run the app; online play now goes through Render.
 
-   The first deployment compiles the Postgres schema on startup, so it may fail with "failed to initialize" until the database is reachable — just retry the deployment once Postgres is healthy.
+If you prefer config-as-code, you can commit a `render.yaml` blueprint to the repo root and use **New + → Blueprint** instead:
+
+```yaml
+services:
+  - type: web
+    name: bored-games-api
+    runtime: docker
+    repo: https://github.com/<you>/bored-games
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: AUTH_SECRET
+        generateValue: true
+```
 
 ## 🤖 AI generated code disclaimer
 

@@ -1,5 +1,24 @@
 import type { ServerWebSocket } from "bun";
-import { sql, type Room, type RoomPlayer, type User } from "./db";
+import {
+  addRoomPlayer,
+  countPlayersInRoom,
+  createRoom,
+  createUser,
+  deleteRoom,
+  finishRoom,
+  getPlayerByIndex,
+  getPlayerInRoom,
+  getRoom,
+  getRoomByCode,
+  getRoomPlayers,
+  getUserById,
+  getUserByToken,
+  recordMove,
+  removePlayer,
+  roomCodeExists,
+  setRoomActive,
+  updateRoomAfterMove,
+} from "./db";
 import { generateRoomCode, generateToken, verifyToken } from "./auth";
 import { getGameEngine } from "./games";
 
@@ -17,31 +36,6 @@ export interface WsData {
   userId: string | null;
   username: string | null;
   roomId: string | null;
-}
-
-async function getUserByToken(token: string): Promise<User | null> {
-  const rows = await sql`SELECT * FROM users WHERE auth_token = ${token}`;
-  return rows.length > 0 ? (rows[0] as User) : null;
-}
-
-async function getUserById(userId: string): Promise<User | null> {
-  const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
-  return rows.length > 0 ? (rows[0] as User) : null;
-}
-
-async function getRoomPlayers(roomId: string): Promise<RoomPlayer[]> {
-  return (await sql`
-    SELECT rp.*, u.username
-    FROM room_players rp
-    JOIN users u ON u.id = rp.user_id
-    WHERE rp.room_id = ${roomId}
-    ORDER BY rp.player_index
-  `) as RoomPlayer[];
-}
-
-async function getRoom(roomId: string): Promise<Room | null> {
-  const rows = await sql`SELECT * FROM rooms WHERE id = ${roomId}`;
-  return rows.length > 0 ? (rows[0] as Room) : null;
 }
 
 function roomTopic(roomId: string): string {
@@ -62,14 +56,14 @@ function broadcastToRoom(roomId: string, payload: Record<string, any>): void {
   broadcaster?.publish(roomTopic(roomId), JSON.stringify(payload));
 }
 
-export async function onSocketOpen(ws: ServerWebSocket<WsData>): Promise<void> {
+export function onSocketOpen(ws: ServerWebSocket<WsData>): void {
   ws.data = { userId: null, username: null, roomId: null };
 }
 
-export async function onSocketMessage(
+export function onSocketMessage(
   ws: ServerWebSocket<WsData>,
   rawMessage: string | Buffer
-): Promise<void> {
+): void {
   let msg: Message;
   try {
     msg = JSON.parse(String(rawMessage));
@@ -80,19 +74,19 @@ export async function onSocketMessage(
 
   switch (msg.type) {
     case "auth":
-      await handleAuth(ws, msg);
+      handleAuth(ws, msg);
       break;
     case "create_room":
-      await handleCreateRoom(ws, msg);
+      handleCreateRoom(ws, msg);
       break;
     case "join_room":
-      await handleJoinRoom(ws, msg);
+      handleJoinRoom(ws, msg);
       break;
     case "move":
-      await handleMove(ws, msg);
+      handleMove(ws, msg);
       break;
     case "leave_room":
-      await handleLeaveRoom(ws);
+      handleLeaveRoom(ws);
       break;
     case "ping":
       send(ws, { type: "pong" });
@@ -102,11 +96,11 @@ export async function onSocketMessage(
   }
 }
 
-export async function onSocketClose(ws: ServerWebSocket<WsData>): Promise<void> {
-  await handleDisconnect(ws);
+export function onSocketClose(ws: ServerWebSocket<WsData>): void {
+  handleDisconnect(ws);
 }
 
-async function handleAuth(ws: ServerWebSocket<WsData>, msg: Message): Promise<void> {
+function handleAuth(ws: ServerWebSocket<WsData>, msg: Message): void {
   const { token, username } = msg;
   if (typeof token !== "string" || typeof username !== "string") {
     sendError(ws, "auth requires token and username");
@@ -118,14 +112,9 @@ async function handleAuth(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
     return;
   }
 
-  let user = await getUserByToken(token);
+  let user = getUserByToken(token);
   if (!user) {
-    const [created] = await sql`
-      INSERT INTO users ${sql({ username, auth_token: token })}
-      ON CONFLICT (auth_token) DO NOTHING
-      RETURNING *
-    `;
-    user = created;
+    user = createUser(username, token);
   }
   if (!user) {
     sendError(ws, "Could not create user");
@@ -137,7 +126,7 @@ async function handleAuth(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
   send(ws, { type: "auth_ok", username: user.username, userId: user.id });
 }
 
-async function handleCreateRoom(ws: ServerWebSocket<WsData>, msg: Message): Promise<void> {
+function handleCreateRoom(ws: ServerWebSocket<WsData>, msg: Message): void {
   if (!ws.data.userId) {
     sendError(ws, "Not authenticated");
     return;
@@ -158,26 +147,14 @@ async function handleCreateRoom(ws: ServerWebSocket<WsData>, msg: Message): Prom
   let code = generateRoomCode();
   // Ensure uniqueness
   for (let attempt = 0; attempt < 5; attempt++) {
-    const existing = await sql`SELECT id FROM rooms WHERE code = ${code}`;
-    if (existing.length === 0) break;
+    if (!roomCodeExists(code)) break;
     code = generateRoomCode();
   }
 
   const userId = ws.data.userId;
-  const [room] = await sql`
-    INSERT INTO rooms ${sql({ code, game_type: gameType, state: {}, status: "waiting" })}
-    RETURNING *
-  `;
+  const room = createRoom(code, gameType);
 
-  const [player] = await sql`
-    INSERT INTO room_players ${sql({
-      room_id: room.id,
-      user_id: userId,
-      player_index: 0,
-      symbol: engine.getPlayerSymbol(0),
-    })}
-    RETURNING *
-  `;
+  const player = addRoomPlayer(room.id, userId, 0, engine.getPlayerSymbol(0));
 
   ws.data.roomId = room.id;
   ws.subscribe(roomTopic(room.id));
@@ -198,7 +175,7 @@ async function handleCreateRoom(ws: ServerWebSocket<WsData>, msg: Message): Prom
   });
 }
 
-async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promise<void> {
+function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): void {
   if (!ws.data.userId) {
     sendError(ws, "Not authenticated");
     return;
@@ -215,13 +192,12 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
   }
 
   const normalized = code.trim().toLowerCase();
-  const rooms = await sql`SELECT * FROM rooms WHERE code = ${normalized}`;
-  if (rooms.length === 0) {
+  const room = getRoomByCode(normalized);
+  if (!room) {
     sendError(ws, "Room not found");
     return;
   }
 
-  const room = rooms[0] as Room;
   if (room.status !== "waiting") {
     sendError(ws, "Room is not accepting players");
     return;
@@ -242,7 +218,7 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
   }
 
   const userId = ws.data.userId;
-  const members = await getRoomPlayers(room.id);
+  const members = getRoomPlayers(room.id);
   const alreadyIn = members.some((m) => m.user_id === userId);
   if (alreadyIn) {
     sendError(ws, "You are already in this room");
@@ -255,15 +231,7 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
   }
 
   const playerIndex = members.length;
-  const [player] = await sql`
-    INSERT INTO room_players ${sql({
-      room_id: room.id,
-      user_id: userId,
-      player_index: playerIndex,
-      symbol: engine.getPlayerSymbol(playerIndex),
-    })}
-    RETURNING *
-  `;
+  const player = addRoomPlayer(room.id, userId, playerIndex, engine.getPlayerSymbol(playerIndex));
 
   ws.data.roomId = room.id;
   ws.subscribe(roomTopic(room.id));
@@ -276,20 +244,13 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
     symbol: player.symbol,
   });
 
-  const updatedMembers = await getRoomPlayers(room.id);
+  const updatedMembers = getRoomPlayers(room.id);
   const managedByEngine = updatedMembers.length >= engine.playerCount.min;
 
   if (managedByEngine) {
     // Start the game
     const initialState = engine.createInitialState(updatedMembers.length);
-    const [updated] = await sql`
-      UPDATE rooms
-      SET state = ${sql.unsafe(`'${JSON.stringify(initialState).replaceAll("'", "''")}'::jsonb`)},
-          status = 'active',
-          current_turn = ${updatedMembers[0].user_id}
-      WHERE id = ${room.id}
-      RETURNING *
-    `;
+    const updated = setRoomActive(room.id, initialState, updatedMembers[0].user_id);
 
     const playersPayload = updatedMembers.map((m) => ({
       userId: m.user_id,
@@ -327,7 +288,7 @@ async function handleJoinRoom(ws: ServerWebSocket<WsData>, msg: Message): Promis
   }
 }
 
-async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<void> {
+function handleMove(ws: ServerWebSocket<WsData>, msg: Message): void {
   const userId = ws.data.userId;
   if (!userId) {
     sendError(ws, "Not authenticated");
@@ -340,7 +301,7 @@ async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
     return;
   }
 
-  const room = await getRoom(roomId);
+  const room = getRoom(roomId);
   if (!room) {
     sendError(ws, "Room not found");
     return;
@@ -359,47 +320,32 @@ async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
     return;
   }
 
-  const player = await sql`
-    SELECT * FROM room_players WHERE room_id = ${roomId} AND user_id = ${userId}
-  `;
-  if (player.length === 0) {
+  const player = getPlayerInRoom(roomId, userId);
+  if (!player) {
     sendError(ws, "You are not in this room");
     return;
   }
 
-  const playerIndex = (player[0] as RoomPlayer).player_index;
+  const playerIndex = player.player_index;
 
   if (!engine.validateMove(room.state, moveData, playerIndex)) {
     sendError(ws, "Invalid move");
     return;
   }
 
-  const members = await getRoomPlayers(roomId);
+  const members = getRoomPlayers(roomId);
   const newState = engine.applyMove(room.state, moveData, playerIndex, members.length);
   const gameOver = engine.checkGameOver(newState);
 
-  await sql`
-    INSERT INTO moves ${sql({
-      room_id: roomId,
-      player_id: userId,
-      player_index: playerIndex,
-      move_data: moveData,
-    })}
-  `;
+  recordMove(roomId, userId, playerIndex, moveData);
 
   if (gameOver) {
-    const winnerId = gameOver.winnerIndex !== null
-      ? (await sql`SELECT user_id FROM room_players WHERE room_id = ${roomId} AND player_index = ${gameOver.winnerIndex}`)[0]?.user_id
-      : null;
+    const winnerId =
+      gameOver.winnerIndex !== null
+        ? (getPlayerByIndex(roomId, gameOver.winnerIndex)?.user_id ?? null)
+        : null;
 
-    const [updated] = await sql`
-      UPDATE rooms
-      SET state = ${sql.unsafe(`'${JSON.stringify(newState).replaceAll("'", "''")}'::jsonb`)},
-          status = 'finished',
-          winner_id = ${winnerId ?? null}
-      WHERE id = ${roomId}
-      RETURNING *
-    `;
+    const updated = finishRoom(roomId, newState, winnerId);
 
     broadcastToRoom(roomId, {
       type: "game_over",
@@ -414,13 +360,7 @@ async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
   const nextPlayerIndex = newState.currentPlayerIndex;
   const nextPlayerId = members.find((m) => m.player_index === nextPlayerIndex)?.user_id ?? null;
 
-  const [updated] = await sql`
-    UPDATE rooms
-    SET state = ${sql.unsafe(`'${JSON.stringify(newState).replaceAll("'", "''")}'::jsonb`)},
-        current_turn = ${nextPlayerId}
-    WHERE id = ${roomId}
-    RETURNING *
-  `;
+  const updated = updateRoomAfterMove(roomId, newState, nextPlayerId);
 
   broadcastToRoom(roomId, {
     type: "opponent_move",
@@ -433,15 +373,15 @@ async function handleMove(ws: ServerWebSocket<WsData>, msg: Message): Promise<vo
   });
 }
 
-async function handleLeaveRoom(ws: ServerWebSocket<WsData>): Promise<void> {
-  await handleDisconnect(ws);
+function handleLeaveRoom(ws: ServerWebSocket<WsData>): void {
+  handleDisconnect(ws);
 }
 
-async function handleDisconnect(ws: ServerWebSocket<WsData>): Promise<void> {
+function handleDisconnect(ws: ServerWebSocket<WsData>): void {
   const { userId, roomId } = ws.data;
   if (!userId || !roomId) return;
 
-  const room = await getRoom(roomId);
+  const room = getRoom(roomId);
   if (!room) {
     ws.data.roomId = null;
     return;
@@ -449,12 +389,9 @@ async function handleDisconnect(ws: ServerWebSocket<WsData>): Promise<void> {
 
   if (room.status === "waiting") {
     // Remove player from waiting room
-    await sql`
-      DELETE FROM room_players WHERE room_id = ${roomId} AND user_id = ${userId}
-    `;
-    const remaining = await sql`SELECT COUNT(*)::int AS count FROM room_players WHERE room_id = ${roomId} AND user_id IS NOT NULL`;
-    if (remaining.length === 0 || Number(remaining[0].count) === 0) {
-      await sql`DELETE FROM rooms WHERE id = ${roomId}`;
+    removePlayer(roomId, userId);
+    if (countPlayersInRoom(roomId) === 0) {
+      deleteRoom(roomId);
     } else {
       broadcastToRoom(roomId, {
         type: "player_left",
@@ -463,7 +400,7 @@ async function handleDisconnect(ws: ServerWebSocket<WsData>): Promise<void> {
       });
     }
   } else if (room.status === "active") {
-    const user = await getUserById(userId);
+    const user = getUserById(userId);
     broadcastToRoom(roomId, {
       type: "opponent_disconnected",
       roomId,

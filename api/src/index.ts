@@ -1,5 +1,5 @@
 import { serve, type ServerWebSocket } from "bun";
-import { initDb, sql } from "./db";
+import { initDb } from "./db";
 import {
   onSocketClose,
   onSocketMessage,
@@ -45,7 +45,6 @@ setBroadcaster(server);
   try {
     await initDb();
     console.log(`[server] listening on ws://localhost:${PORT}/ws`);
-    void sql`SELECT 1`;
   } catch (err) {
     console.error("[server] failed to initialize:", err);
     process.exit(1);
