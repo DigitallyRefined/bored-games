@@ -1,0 +1,25 @@
+# Headless Android emulator image, extending the project's SDK build image.
+FROM expo-android:1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpulse0 libnss3 libnspr4 libx11-6 libxext6 libxdamage1 libxfixes3 \
+        libxcomposite1 libxrandr2 libxtst6 libxi6 libxcursor1 libxkbcommon0 \
+        libgl1 libpango-1.0-0 libcairo2 fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Emulator + an x86_64 Google APIs system image, plus a ready-made AVD.
+RUN yes | sdkmanager "emulator" "system-images;android-36;google_apis;x86_64" \
+    && echo no | avdmanager create avd -n emu \
+        -k "system-images;android-36;google_apis;x86_64" \
+        --device pixel_4 --force
+
+ENV ANDROID_USER_HOME=/opt/android-home \
+    ANDROID_AVD_HOME=/opt/android-home/avd
+
+# adb server inside this container; emulator console on 5554, adb on 5555.
+EXPOSE 5554 5555
+
+CMD ["/opt/android-sdk/emulator/emulator", "-avd", "emu", "-no-window", "-no-audio", "-no-boot-anim", \
+     "-gpu", "swiftshader_indirect", "-no-snapshot", "-accel", "on", \
+     "-memory", "3072", "-port", "5554"]

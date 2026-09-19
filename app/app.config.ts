@@ -10,9 +10,9 @@ const normalizedBaseUrl = baseUrl
   : undefined;
 
 export default {
-  name: "bored-games",
+  name: "Bored Games",
   slug: "bored-games",
-  version: "1.0.0",
+  version: "0.0.1",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "boredgames",
@@ -21,8 +21,10 @@ export default {
     icon: "./assets/images/icon.png",
   },
   android: {
+    package: "com.github.digitallyrefined.boredgames",
+    versionCode: 1,
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
+      backgroundColor: "#F0D9B5",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -38,7 +40,7 @@ export default {
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#208AEF",
+        backgroundColor: "#8A5A2B",
         image: "./assets/images/splash-icon.png",
         imageWidth: 76,
       },

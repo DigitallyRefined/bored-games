@@ -21,7 +21,21 @@ export function SettingsButton({ style, size = FontSize.xxl }: SettingsButtonPro
       accessibilityRole="button"
       accessibilityLabel="Settings"
     >
-      <Text style={[styles.icon, { color: theme.text, fontSize: size }]}>⚙︎</Text>
+      <Text
+        style={[
+          styles.icon,
+          {
+            color: theme.text,
+            fontSize: size,
+            width: size * 1.2,
+            height: size * 1.2,
+            lineHeight: size * 1.2,
+          },
+        ]}
+        numberOfLines={1}
+      >
+        ⚙︎
+      </Text>
     </Pressable>
   );
 }
@@ -34,7 +48,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   icon: {
-    lineHeight: FontSize.xxl * 1.1,
+    textAlign: "center",
+    overflow: "visible",
   },
   pressed: {
     transform: [{ scale: 0.95 }],

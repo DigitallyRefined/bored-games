@@ -28,7 +28,7 @@ export function ScreenHeader({ title, backTo, hideSettings = false }: ScreenHead
       {hideSettings ? (
         <View style={styles.backSpacer} />
       ) : (
-        <SettingsButton style={styles.settingsButton} />
+        <SettingsButton />
       )}
     </View>
   );
@@ -46,6 +46,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: "transparent",
+    flexShrink: 0,
   },
   backIcon: {
     fontFamily: Fonts.hand,
@@ -59,13 +60,11 @@ const styles = StyleSheet.create({
   backSpacer: {
     width: 34,
   },
-  settingsButton: {
-    width: 34,
-    alignItems: "center",
-  },
   screenTitle: {
     fontFamily: Fonts.title,
     fontSize: FontSize.xxxl,
     lineHeight: FontSize.xxxl * 1.1,
+    flexShrink: 1,
+    marginHorizontal: Spacing.two,
   },
 });

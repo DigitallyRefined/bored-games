@@ -2,6 +2,10 @@
 
 A collection of classic board games you can play on your phone — either locally on a shared device or online against a friend over the internet.
 
+https://digitallyrefined.github.io/bored-games or [download the app](https://github.com/DigitallyRefined/bored-games/releases)
+
+<img src="screenshot.webp" alt="Android app screenshot" width="60%">
+
 ## Games
 
 Each game has two ways to play:
@@ -118,6 +122,94 @@ services:
       - key: AUTH_SECRET
         generateValue: true
 ```
+
+## Build the Android APKs (Docker)
+
+Debug and release APKs are built with Gradle inside Docker using
+[`build-android.sh`](./build-android.sh) and [`Dockerfile.android`](./Dockerfile.android).
+Docker is the only host requirement — no Node, JDK, or Android SDK install is
+needed. The first run builds the image and downloads Gradle dependencies, which
+takes a while; later runs reuse the cached image and the local caches in
+`.cache/` (git-ignored).
+
+### Debug APK (default)
+
+```sh
+./build-android.sh
+```
+
+The debug APK is written to `build/apk/app-debug.apk`.
+
+### Signed release APK
+
+Create a release keystore with `keytool` (available from any JDK, for example via
+the build image). Keep it safe — if you lose it you cannot update an
+already-installed app.
+
+```sh
+mkdir -p android/keystores
+
+keytool \
+  -genkey -v \
+  -storetype JKS \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000 \
+  -storepass "$KEYSTORE_PASSWORD" \
+  -keypass "$KEY_PASSWORD" \
+  -alias "$KEY_ALIAS" \
+  -keystore android.keystore \
+  -dname "CN=DigitallyRefined,OU=,O=,L=,S=,C=US"
+```
+
+Store the credentials in an untracked `keystore.properties`:
+
+```properties keystore.properties
+storeFile=android.keystore
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+keyPassword=YOUR_KEY_PASSWORD
+```
+
+Then build with the release flag:
+
+```sh
+./build-android.sh --release \
+  --keystore android.keystore \
+  --properties keystore.properties
+```
+
+The signed APK is written to `build/apk/app-release.apk`. After a successful
+release build the script verifies the APK and prints its signing information
+(signing schemes, certificate DN and digests, key algorithm/size).
+
+The `storeFile` value in your properties file is ignored: the script mounts the
+keystore into the container and rewrites `storeFile` to its path inside the
+container. Since `expo prebuild` regenerates the git-ignored `android/` directory
+(and wipes manual Gradle edits), the script also runs
+[`scripts/patch-release-signing.js`](./scripts/patch-release-signing.js) to point
+the release build type at your keystore.
+
+### Options
+
+- `--clean` — regenerate the native `android/` project before building. Use this
+  after changing native configuration (`app.json`, config plugins, native
+  dependencies).
+- `-h`, `--help` — show usage.
+
+Do **not** commit `keystore.properties` or the keystore. The repo already ignores
+`*.jks` and `/android`.
+
+### Install
+
+With `adb` on your `PATH` and a device connected over USB debugging:
+
+```sh
+adb install -r build/apk/app-release.apk
+```
+
+Or copy the APK to the device and open it to install. To update an already-installed
+build, the APK must be signed with the same keystore.
 
 ## 🤖 AI generated code disclaimer
 

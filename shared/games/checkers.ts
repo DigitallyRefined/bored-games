@@ -174,8 +174,17 @@ export function applyPath(board: CheckersBoard, path: number[]): ApplyResult {
 
 // After an in-progress capture chain, the only legal continuations are further
 // captures with the same piece (unless it was crowned and the move ends).
+// A turn is either one simple step or a capture chain — never a mix — so a path
+// that began with a non-capturing step can never continue.
 export function continuationOptions(board: CheckersBoard, path: number[]): MoveOption[] {
   if (path.length === 0) return [];
+  for (let i = 1; i < path.length; i++) {
+    const prev = path[i - 1];
+    const cur = path[i];
+    const dr = rowOf(cur) - rowOf(prev);
+    const dc = colOf(cur) - colOf(prev);
+    if (Math.abs(dr) !== 2 || Math.abs(dc) !== 2) return [];
+  }
   const { board: sim, promoted } = applyPath(board, path);
   if (promoted) return [];
   return captureOptions(sim, path[path.length - 1]);
@@ -211,9 +220,10 @@ export function validatePath(
     const dc = colOf(cur) - colOf(prev);
 
     if (Math.abs(dr) === 1 && Math.abs(dc) === 1) {
-      // Simple diagonal step (single-step moves only; a capture chain is never a simple move)
+      // A turn is either one simple step into an open square or a capture
+      // chain in which every leap captures a piece — never a mix of both.
+      if (capturedAny || path.length > 2) return false;
       if (!first.king && dr !== forwardDirection(owner)) return false;
-      if (capturedAny) return false;
       sim[prev] = null;
       sim[cur] = first;
       pos = cur;
