@@ -1,22 +1,239 @@
-import React, { useState } from "react";
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  Text,
+  View,
+  StyleSheet,
+} from "react-native";
 
 import { Fonts } from "@/constants/theme";
 import {
   BOARD_COLORS,
   PIECE_GLYPHS,
+  colOf,
+  indexOf,
+  rowOf,
 } from "@/lib/chess";
 import type {
   ChessBoard as Board,
+  ChessMove,
   ChessOwner,
   ChessPiece,
   ChessPieceType,
 } from "@/lib/chess";
 
 const FRAME_PAD = 6;
+const MOVE_ANIM_DURATION = 320;
+// Fraction of the total animation spent on the slide; the remaining fraction is
+// a brief cross-fade between the sliding ghost and the settled destination
+// piece. Keeps exactly one piece visible at all times.
+const SLIDE_FADE_START = 0.78;
 
 function paletteFor(owner: ChessOwner) {
   return owner === 0 ? BOARD_COLORS.darkPiece : BOARD_COLORS.lightPiece;
+}
+
+interface AnimatingPiece {
+  piece: ChessPiece;
+  rest: ChessPiece;
+  from: number;
+  to: number;
+}
+
+// Reconstructs the board as it was just before `move`: the piece that now sits
+// on the destination square is placed back on its origin square (kept as a pawn
+// for promotions), and a castling rook is shifted back onto its home square.
+function boardBeforeMove(board: Board, move: ChessMove): Board {
+  const prev = board.slice();
+  const piece = prev[move.to];
+  if (!piece) return prev;
+  prev[move.to] = null;
+  prev[move.from] = move.promotion
+    ? { owner: piece.owner, type: "pawn" }
+    : piece;
+  if (
+    piece.type === "king" &&
+    Math.abs(colOf(move.to) - colOf(move.from)) === 2
+  ) {
+    const row = rowOf(move.from);
+    const toCol = colOf(move.to);
+    const rookFrom = indexOf(row, toCol === 6 ? 7 : 0);
+    const rookTo = indexOf(row, toCol === 6 ? 5 : 3);
+    prev[rookTo] = null;
+    prev[rookFrom] = { owner: piece.owner, type: "rook" };
+  }
+  return prev;
+}
+
+// Squares covered by the in-flight pieces of `move`. The board skips drawing
+// its own piece on these squares while the move animation layer is mounted;
+// for castling both the king's and rook's destinations are covered.
+function animatedDestinationSquares(board: Board, move: ChessMove): Set<number> {
+  const squares = new Set<number>();
+  const piece = board[move.to];
+  if (!piece) return squares;
+  squares.add(move.to);
+  if (
+    piece.type === "king" &&
+    Math.abs(colOf(move.to) - colOf(move.from)) === 2
+  ) {
+    squares.add(indexOf(rowOf(move.to), colOf(move.to) === 6 ? 5 : 3));
+  }
+  return squares;
+}
+
+// A piece that slides from its origin to its destination. Rendering is purely
+// local: the sliding ghost and a settled copy at the destination cross-fade as
+// the ghost lands, so exactly one piece is visible. The board hides the
+// destination square for as long as the move is "recent".
+function AnimatedChessPiece({
+  piece,
+  rest,
+  from,
+  to,
+  cellSize,
+}: {
+  piece: ChessPiece;
+  rest: ChessPiece;
+  from: number;
+  to: number;
+  cellSize: number;
+}) {
+  const [progress] = useState(() => new Animated.Value(0));
+  const pieceDim = cellSize * 0.92;
+  const fRow = rowOf(from);
+  const fCol = colOf(from);
+  const tRow = rowOf(to);
+  const tCol = colOf(to);
+  const slideFraction = SLIDE_FADE_START;
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: MOVE_ANIM_DURATION / slideFraction,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, slideFraction]);
+
+  const translateX = progress.interpolate({
+    inputRange: [0, slideFraction],
+    outputRange: [0, (tCol - fCol) * cellSize],
+    extrapolate: "clamp",
+  });
+  const translateY = progress.interpolate({
+    inputRange: [0, slideFraction],
+    outputRange: [0, (tRow - fRow) * cellSize],
+    extrapolate: "clamp",
+  });
+  const ghostOpacity = progress.interpolate({
+    inputRange: [0, slideFraction, 1],
+    outputRange: [1, 1, 0],
+    extrapolate: "clamp",
+  });
+  const restOpacity = progress.interpolate({
+    inputRange: [0, slideFraction, 1],
+    outputRange: [0, 0, 1],
+    extrapolate: "clamp",
+  });
+
+  const ghostLeft = fCol * cellSize + (cellSize - pieceDim) / 2;
+  const ghostTop = fRow * cellSize + (cellSize - pieceDim) / 2;
+  const restLeft = tCol * cellSize + (cellSize - pieceDim) / 2;
+  const restTop = tRow * cellSize + (cellSize - pieceDim) / 2;
+
+  return (
+    <>
+      <Animated.View
+        style={[
+          styles.animPiece,
+          {
+            width: pieceDim,
+            height: pieceDim,
+            left: restLeft,
+            top: restTop,
+            opacity: restOpacity,
+          },
+        ]}
+      >
+        <PieceView piece={rest} size={pieceDim} />
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.animPiece,
+          {
+            width: pieceDim,
+            height: pieceDim,
+            left: ghostLeft,
+            top: ghostTop,
+            opacity: ghostOpacity,
+            transform: [{ translateX }, { translateY }],
+          },
+        ]}
+      >
+        <PieceView piece={piece} size={pieceDim} />
+      </Animated.View>
+    </>
+  );
+}
+
+// Rendered whenever a fresh lastMove lands (keyed by that move), so the board
+// animates the piece sliding from its origin to its destination. Castling
+// animates the king and its matching rook together.
+function MoveAnimLayer({
+  board,
+  lastMove,
+  cellSize,
+}: {
+  board: Board;
+  lastMove: ChessMove;
+  cellSize: number;
+}) {
+  const prev = boardBeforeMove(board, lastMove);
+  const mover = prev[lastMove.from];
+  const rest = board[lastMove.to];
+  if (!mover || !rest) return null;
+
+  const items: AnimatingPiece[] = [
+    { piece: mover, rest, from: lastMove.from, to: lastMove.to },
+  ];
+  if (
+    mover.type === "king" &&
+    Math.abs(colOf(lastMove.to) - colOf(lastMove.from)) === 2
+  ) {
+    const row = rowOf(lastMove.from);
+    const toCol = colOf(lastMove.to);
+    const rookFrom = indexOf(row, toCol === 6 ? 7 : 0);
+    const rook = prev[rookFrom];
+    const rookTo = indexOf(row, toCol === 6 ? 5 : 3);
+    if (rook && board[rookTo]) {
+      items.push({
+        piece: rook,
+        rest: board[rookTo],
+        from: rookFrom,
+        to: rookTo,
+      });
+    }
+  }
+
+  return (
+    <View style={styles.animOverlay} pointerEvents="none">
+      {items.map((ap) => (
+        <AnimatedChessPiece
+          key={`${ap.from}-${ap.to}`}
+          piece={ap.piece}
+          rest={ap.rest}
+          from={ap.from}
+          to={ap.to}
+          cellSize={cellSize}
+        />
+      ))}
+    </View>
+  );
 }
 
 interface PieceViewProps {
@@ -50,7 +267,7 @@ export interface ChessBoardProps {
   sources?: number[];
   selected?: number | null;
   destinations?: number[];
-  lastMove?: { from: number; to: number } | null;
+  lastMove?: ChessMove | null;
   checkSquare?: number | null;
   disabled?: boolean;
   flipped?: boolean;
@@ -82,6 +299,9 @@ export function ChessBoard({
 
   const sourceSet = new Set(sources);
   const destSet = new Set(destinations);
+  const animHiddenSquares = lastMove
+    ? animatedDestinationSquares(board, lastMove)
+    : new Set<number>();
 
   const fileLabel = (col: number) =>
     String.fromCharCode((flipped ? "h" : "a").charCodeAt(0) + (flipped ? -col : col));
@@ -140,7 +360,7 @@ export function ChessBoard({
                     ]}
                   />
                 )}
-                {showCoord && (
+                {showCoord && gridSize > 0 && (
                   <Text
                     style={[
                       styles.coord,
@@ -158,7 +378,7 @@ export function ChessBoard({
                     {row === 7 ? fileLabel(col) : rankLabel(row)}
                   </Text>
                 )}
-                {piece && (
+                {piece && gridSize > 0 && !animHiddenSquares.has(index) && (
                   <View style={styles.pieceWrap}>
                     {isSelected && (
                       <View
@@ -217,7 +437,15 @@ export function ChessBoard({
             </Pressable>
           );
         })}
-        {promoting && (
+        {lastMove && cellSize > 0 && (
+          <MoveAnimLayer
+            key={`${lastMove.from}-${lastMove.to}-${lastMove.promotion ?? ""}`}
+            board={board}
+            lastMove={lastMove}
+            cellSize={cellSize}
+          />
+        )}
+        {promoting && gridSize > 0 && (
           <View style={styles.promotionOverlay}>
             <View style={styles.promotionCard}>
               {([0, 2, 3, 1] as const).map((typeIndex) => {
@@ -346,6 +574,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: BOARD_COLORS.promotionBackdrop,
     zIndex: 10,
+  },
+  animOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 20,
+    elevation: 20,
+  },
+  animPiece: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
   },
   promotionCard: {
     flexDirection: "row",

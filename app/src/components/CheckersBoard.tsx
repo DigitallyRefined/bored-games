@@ -1,10 +1,22 @@
-import React, { useState } from "react";
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  Text,
+  View,
+  StyleSheet,
+} from "react-native";
 
-import { BOARD_COLORS } from "@/lib/checkers";
+import { BOARD_COLORS, colOf, rowOf } from "@/lib/checkers";
 import type { CheckersBoard as Board, CheckersPiece } from "@/lib/checkers";
 
 const FRAME_PAD = 6;
+const HOP_ANIM_DURATION = 260;
+// Fraction of the total animation spent travelling the path; the remaining
+// fraction is a brief cross-fade between the sliding ghost and the settled
+// destination checker. Keeps exactly one piece visible at all times.
+const SLIDE_FADE_START = 0.78;
 
 interface PieceViewProps {
   piece: CheckersPiece;
@@ -73,6 +85,127 @@ const styledPiece = {
   }),
 };
 
+// A checker that slides along a move path (a plain step or a whole capture
+// chain). Rendering is purely local: the sliding ghost and a settled copy at
+// the last square cross-fade as the ghost lands, so exactly one piece is
+// visible. The board hides the destination square for as long as the move is
+// "recent".
+function AnimatedCheckersPiece({
+  piece,
+  path,
+  cellSize,
+  pieceDim,
+}: {
+  piece: CheckersPiece;
+  path: number[];
+  cellSize: number;
+  pieceDim: number;
+}) {
+  const [progress] = useState(() => new Animated.Value(0));
+  const steps = path.length - 1;
+  const slideEnd = steps * SLIDE_FADE_START;
+
+  const centers = path.map((index) => ({
+    x: colOf(index) * cellSize + (cellSize - pieceDim) / 2,
+    y: rowOf(index) * cellSize + (cellSize - pieceDim) / 2,
+  }));
+  const start = centers[0];
+  const end = centers[centers.length - 1];
+  const inputRange = path.map((_, i) => i);
+  const translateX = progress.interpolate({
+    inputRange,
+    outputRange: centers.map((c) => c.x - start.x),
+  });
+  const translateY = progress.interpolate({
+    inputRange,
+    outputRange: centers.map((c) => c.y - start.y),
+  });
+  const ghostOpacity = progress.interpolate({
+    inputRange: [0, slideEnd, steps],
+    outputRange: [1, 1, 0],
+    extrapolate: "clamp",
+  });
+  const restOpacity = progress.interpolate({
+    inputRange: [0, slideEnd, steps],
+    outputRange: [0, 0, 1],
+    extrapolate: "clamp",
+  });
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: steps,
+      duration: (steps * HOP_ANIM_DURATION) / SLIDE_FADE_START,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, steps]);
+
+  return (
+    <>
+      <Animated.View
+        style={[
+          styles.animPiece,
+          {
+            width: pieceDim,
+            height: pieceDim,
+            left: end.x,
+            top: end.y,
+            opacity: restOpacity,
+          },
+        ]}
+      >
+        <PieceView piece={piece} size={pieceDim} />
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.animPiece,
+          {
+            width: pieceDim,
+            height: pieceDim,
+            left: start.x,
+            top: start.y,
+            opacity: ghostOpacity,
+            transform: [{ translateX }, { translateY }],
+          },
+        ]}
+      >
+        <PieceView piece={piece} size={pieceDim} />
+      </Animated.View>
+    </>
+  );
+}
+
+// Rendered whenever a fresh move path lands (keyed by that path), so the board
+// animates the checker travelling along the whole path — including the capture
+// chains of multi-jump moves.
+function CheckersMoveLayer({
+  board,
+  path,
+  cellSize,
+  pieceDim,
+}: {
+  board: Board;
+  path: number[];
+  cellSize: number;
+  pieceDim: number;
+}) {
+  const moving = board[path[path.length - 1]];
+  if (!moving) return null;
+
+  return (
+    <View style={styles.animOverlay} pointerEvents="none">
+      <AnimatedCheckersPiece
+        piece={moving}
+        path={path}
+        cellSize={cellSize}
+        pieceDim={pieceDim}
+      />
+    </View>
+  );
+}
+
 export interface CheckersBoardProps {
   board: Board;
   onSquarePress: (index: number) => void;
@@ -100,11 +233,14 @@ export function CheckersBoard({
   const pieceSize = cellSize * 0.68;
   const markerSize = cellSize * 0.34;
   const captureMarkerSize = pieceSize * 0.78;
+  const ringSize = pieceSize * 1.14;
 
   const destSet = new Set(destinations);
   const captureSet = new Set(captureDestinations);
   const sourceSet = new Set(sources);
   const lastSet = new Set(lastMovePath ?? []);
+  const animHiddenSquare = lastMovePath ? lastMovePath[lastMovePath.length - 1] : null;
+  const isAnimDestination = animHiddenSquare !== null && board[animHiddenSquare] !== null;
 
   return (
     <View
@@ -171,16 +307,16 @@ export function CheckersBoard({
                     />
                   )
                 )}
-                {piece && (
+                {piece && gridSize > 0 && !(isAnimDestination && index === animHiddenSquare) && (
                   <View style={styles.pieceWrap}>
                     {isSelected && (
                       <View
                         style={[
                           styles.selectionRing,
                           {
-                            width: pieceSize * 0.92,
-                            height: pieceSize * 0.92,
-                            borderRadius: (pieceSize * 0.92) / 2,
+                            width: ringSize,
+                            height: ringSize,
+                            borderRadius: ringSize / 2,
                           },
                         ]}
                       />
@@ -190,9 +326,9 @@ export function CheckersBoard({
                         style={[
                           styles.sourceRing,
                           {
-                            width: pieceSize * 0.92,
-                            height: pieceSize * 0.92,
-                            borderRadius: (pieceSize * 0.92) / 2,
+                            width: ringSize,
+                            height: ringSize,
+                            borderRadius: ringSize / 2,
                           },
                         ]}
                       />
@@ -204,6 +340,15 @@ export function CheckersBoard({
             </Pressable>
           );
         })}
+        {lastMovePath && lastMovePath.length > 1 && cellSize > 0 && (
+          <CheckersMoveLayer
+            key={lastMovePath.join("-")}
+            board={board}
+            path={lastMovePath}
+            cellSize={cellSize}
+            pieceDim={pieceSize * 0.92}
+          />
+        )}
       </View>
     </View>
   );
@@ -228,6 +373,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     borderRadius: 8,
     overflow: "hidden",
+    position: "relative",
   },
   cell: {
     width: "12.5%",
@@ -262,5 +408,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: BOARD_COLORS.accent,
     opacity: 0.6,
+  },
+  animOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 20,
+    elevation: 20,
+  },
+  animPiece: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
