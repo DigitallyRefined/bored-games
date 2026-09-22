@@ -8,7 +8,7 @@ import {
   useColorScheme,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter, useNavigation, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
@@ -17,6 +17,7 @@ import { SketchyButton } from "@/components/SketchyButton";
 import { SketchyCard } from "@/components/SketchyCard";
 import { RoomCodeDisplay } from "@/components/RoomCodeDisplay";
 import { CopyCodeButton } from "@/components/CopyCodeButton";
+import { RoomCodeQrCode } from "@/components/RoomCodeQrCode";
 import { useOnlineBattleships } from "@/hooks/useOnlineBattleships";
 import { useWsConnectionFailureRedirect } from "@/hooks/useWsConnectionFailure";
 
@@ -26,9 +27,17 @@ export default function BattleshipsOnlineScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { game, createRoom, joinRoom, leaveRoom } = useOnlineBattleships();
-  const [roomCodeInput, setRoomCodeInput] = useState("");
+  const params = useLocalSearchParams<{ code?: string }>();
+  const inviteCode = typeof params.code === "string" ? params.code : undefined;
+  const [roomCodeInput, setRoomCodeInput] = useState(inviteCode ?? "");
 
   useWsConnectionFailureRedirect();
+
+  useEffect(() => {
+    if (inviteCode) {
+      joinRoom(inviteCode);
+    }
+  }, [inviteCode, joinRoom]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", () => {
@@ -65,6 +74,7 @@ export default function BattleshipsOnlineScreen() {
               </Text>
               {game.code && <RoomCodeDisplay code={game.code} />}
               <CopyCodeButton code={game.code} style={styles.copyButton} />
+              {game.code && <RoomCodeQrCode code={game.code} path="/games/battleships/online" />}
               <Text style={[styles.waitingText, { color: theme.textSecondary }]}>
                 {game.statusMessage}
               </Text>
